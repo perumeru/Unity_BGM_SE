@@ -69,7 +69,7 @@ public static class BGM_SE_Manager_Util
 }
 public class BGM_SE_Manager : SingletonMonoBehaviour<BGM_SE_Manager>
 {
-    [SerializeField] private BGM_SE_Setting bgm_se_setting;
+    [SerializeField] public BGM_SE_Setting bgm_se_setting;
 
     //-----------------------------------BGM----------------------------------------------
     /// <summary>
