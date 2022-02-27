@@ -3,7 +3,48 @@ using Singleton;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+#if UNITY_EDITOR
+using UnityEditor;
 
+[CustomEditor(typeof(BGM_SE_Manager))]
+public class BGM_SE_ManagerEdit : Editor
+{
+    public override void OnInspectorGUI()
+    {
+        DrawDefaultInspector();
+
+        if (!Application.isPlaying)
+        {
+            GUILayout.Space(20);
+            var audioClipBGM = BGM_SE_Manager.Instance.bgm_se_setting.BGM;
+            GUILayout.Label("AUDIO", EditorStyles.label);
+            
+            for (int i = 0; i < audioClipBGM.Length; i++)
+            {
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.Label("Key=>", EditorStyles.label);
+                GUILayout.TextField(audioClipBGM[i].key, EditorStyles.textField);
+                GUILayout.TextField("AudioName=>", EditorStyles.label);
+                GUILayout.TextField(audioClipBGM[i].value.name, EditorStyles.textField);
+                GUILayout.FlexibleSpace();
+                EditorGUILayout.EndHorizontal();
+            }
+            var audioClipSE = BGM_SE_Manager.Instance.bgm_se_setting.SE;
+            for (int i = 0; i < audioClipSE.Length; i++)
+            {
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.Label("Key=>", EditorStyles.label);
+                GUILayout.TextField(audioClipSE[i].key, EditorStyles.textField);
+                GUILayout.TextField("AudioName=>", EditorStyles.label);
+                GUILayout.TextField(audioClipSE[i].value.name, EditorStyles.textField);
+                GUILayout.FlexibleSpace();
+                EditorGUILayout.EndHorizontal();
+            }
+            
+        }
+    }
+}
+#endif
 public static class BGM_SE_Manager_Util
 {
     const int SAMPLE_RATE = 48000;
@@ -160,29 +201,33 @@ public class BGM_SE_Manager : SingletonMonoBehaviour<BGM_SE_Manager>
     {
         base.Awake();
         Init();
-        DontDestroyOnLoad(this.gameObject);
-    }
-    void Init()
-    {
-        //AudioSourceを２つ用意。クロスフェード時に同時再生するために２つ用意する。
-        this.AudioSources = new AudioSource[2];
-
-        for (int i = 0; i < 2; i++)
-        {
-            this.AudioSources[i] = (this.gameObject.AddComponent<AudioSource>());
-            AudioSource s = this.AudioSources[i];
-            s.playOnAwake = false;
-            s.volume = 0f;
-            s.loop = true;
-        }
-
         SEsources = new AudioSource[SEAudioSourceSize];
         //SE AudioSource
         for (int count = 0; count < SEsources.Length; count++)
         {
             SEsources[count] = gameObject.AddComponent<AudioSource>();
         }
-
+        
+        DontDestroyOnLoad(this.gameObject);
+    }
+    public void Init()
+    {
+        this.AudioSources = gameObject.GetComponents<AudioSource>();
+        if(this.AudioSources == null || this.AudioSources.Length < 2)
+        {
+            //AudioSourceを２つ用意。クロスフェード時に同時再生するために２つ用意する。
+            System.Array.Resize(ref this.AudioSources, 2);
+            for (int i = 0; i < 2 ; i++)
+            {
+                if(this.AudioSources[i] == null)
+                this.AudioSources[i] = (this.gameObject.AddComponent<AudioSource>());
+                AudioSource s = this.AudioSources[i];
+                s.playOnAwake = false;
+                s.volume = 0f;
+                s.loop = true;
+            }
+        }
+        this.CurrentAudioSource = this.SubAudioSource;
         bgm_se_setting = _bgm_se_setting;
     }
     /// <summary>
