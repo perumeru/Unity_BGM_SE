@@ -1,11 +1,14 @@
-using System;
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 [CreateAssetMenu(menuName = "BGM_SE Settings")]
 public class BGM_SE_Setting : ScriptableObject
 {
+    [System.Serializable]
+    public class AudioData
+    {
+        public AudioClip value;
+        public string key;
+    }
     //-----------------------------------BGM----------------------------------------------
     /// <summary>
     /// フェードインとフェードアウトの実行を重ねる割合
@@ -14,7 +17,7 @@ public class BGM_SE_Setting : ScriptableObject
     /// <summary>
     /// BGM
     /// </summary>
-    [SerializeField] public AudioClip[] BGM;
+    [SerializeField] public AudioData[] BGM;
     //-----------------------------------SE----------------------------------------------
     /// <summary>
     /// SE用のAudioSourceの数
@@ -23,7 +26,5 @@ public class BGM_SE_Setting : ScriptableObject
     /// <summary>
     /// SE
     /// </summary>
-    [SerializeField] public AudioClip[] SE;
-
-
+    [SerializeField] public AudioData[] SE;
 }

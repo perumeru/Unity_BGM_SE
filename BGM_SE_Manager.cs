@@ -1,6 +1,8 @@
 ﻿using DG.Tweening;
 using Singleton;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public static class BGM_SE_Manager_Util
 {
@@ -69,7 +71,38 @@ public static class BGM_SE_Manager_Util
 }
 public class BGM_SE_Manager : SingletonMonoBehaviour<BGM_SE_Manager>
 {
-    [SerializeField] public BGM_SE_Setting bgm_se_setting;
+    [SerializeField] BGM_SE_Setting _bgm_se_setting;
+    readonly static Dictionary<string, AudioClip> AudioDictionary = new Dictionary<string, AudioClip>();
+    public BGM_SE_Setting bgm_se_setting
+    {
+        get { return _bgm_se_setting; }
+        set
+        {
+            if (_bgm_se_setting != value) _bgm_se_setting = value;
+            if (_bgm_se_setting != null)
+            {
+                AudioDictionary.Clear();
+                if (_bgm_se_setting.BGM != null)
+                {
+                    foreach (var bgm in _bgm_se_setting.BGM)
+                    {
+                        if (bgm == null || bgm.value == null) continue;
+                        if (bgm.key == "") bgm.key = bgm.value.name;
+                        AudioDictionary.Add(bgm.key, bgm.value);
+                    }
+                }
+                if (_bgm_se_setting.SE != null)
+                {
+                    foreach (var se in _bgm_se_setting.SE)
+                    {
+                        if (se == null || se.value == null) continue;
+                        if (se.key == "") se.key = se.value.name;
+                        AudioDictionary.Add(se.key, se.value);
+                    }
+                }
+            }
+        }
+    }
 
     //-----------------------------------BGM----------------------------------------------
     /// <summary>
@@ -107,20 +140,29 @@ public class BGM_SE_Manager : SingletonMonoBehaviour<BGM_SE_Manager>
     /// BGMを再生するためのAudioSource
     /// </summary>
     AudioSource[] AudioSources = null;
+
+    [Range(0f, 1f)]
+    public float BaseBGMVolume = 1f;
+
+    //-----------------------------------SE----------------------------------------------
+    bool SEMute;
     /// <summary>
-    /// BGM
+    /// SE用のAudioSourceの数
     /// </summary>
-    [SerializeField] public AudioClip[] BGM { get => bgm_se_setting.BGM; }
+    int SEAudioSourceSize { get => bgm_se_setting.SEAudioSourceSize; }
+    AudioSource[] SEsources;
+    [Range(0f, 1f)]
+    public float BaseSEVolume = 1f;
+    readonly object lockSE = new object();
+
+    //---------------------------------------------------------------------------------
     protected override void Awake()
     {
         base.Awake();
-        //シングルトンのためのコード
-        BGMInit();
-        SEInit();
+        Init();
         DontDestroyOnLoad(this.gameObject);
     }
-
-    void BGMInit()
+    void Init()
     {
         //AudioSourceを２つ用意。クロスフェード時に同時再生するために２つ用意する。
         this.AudioSources = new AudioSource[2];
@@ -133,6 +175,15 @@ public class BGM_SE_Manager : SingletonMonoBehaviour<BGM_SE_Manager>
             s.volume = 0f;
             s.loop = true;
         }
+
+        SEsources = new AudioSource[SEAudioSourceSize];
+        //SE AudioSource
+        for (int count = 0; count < SEsources.Length; count++)
+        {
+            SEsources[count] = gameObject.AddComponent<AudioSource>();
+        }
+
+        bgm_se_setting = _bgm_se_setting;
     }
     /// <summary>
     /// BGMを再生します。
@@ -140,10 +191,10 @@ public class BGM_SE_Manager : SingletonMonoBehaviour<BGM_SE_Manager>
     /// <param name="BGMID">BGMID</param>
     /// <param name="redo">再生中のbgmを再度再生するかどうか</param>
     /// <param name="TimeToFade">フェードにかかる時間</param>
-    public void PlayBGM(in int BGMID, bool redo, float TimeToFade)
+    public static void PlayBGM(in string BGMname)
     {
-        if (BGM.Length > BGMID)
-            PlayBGM(BGM[BGMID], redo, TimeToFade);
+        if(AudioDictionary.ContainsKey(BGMname))
+        Instance.PlayBGM(AudioDictionary[BGMname], false, 1.0f);
     }
     /// <summary>
     /// BGMを再生します。
@@ -153,25 +204,18 @@ public class BGM_SE_Manager : SingletonMonoBehaviour<BGM_SE_Manager>
     /// <param name="TimeToFade">フェードにかかる時間</param>
     public void PlayBGM(in AudioClip clip, bool redo, float TimeToFade)
     {
-        if (!clip)
+        if (clip == null)
         {
-            Debug.LogError("BGMを指定してください");
             return;
         }
-        else
-        if (!redo)
+        if ((!redo) && (this.CurrentAudioSource != null) && (this.CurrentAudioSource.clip == clip))
         {
-            if ((this.CurrentAudioSource != null)
-                && (this.CurrentAudioSource.clip == clip))
-            {
-                //すでに指定されたBGMを再生中
-                return;
-            }
+            return;
         }
 
         float fadeInStartDelay = TimeToFade * (1.0f - this.CrossFadeRatio);
         //再生中のBGMをフェードアウト開始
-        this.StopBGM(this.CurrentAudioSource,fadeInStartDelay);
+        this.StopBGM(this.CurrentAudioSource, fadeInStartDelay);
 
         //BGM再生開始
         this.CurrentAudioSource = this.SubAudioSource;
@@ -179,7 +223,7 @@ public class BGM_SE_Manager : SingletonMonoBehaviour<BGM_SE_Manager>
         if (this.CurrentAudioSource.clip == null) return;
 
         this.CurrentAudioSource.PlayDelayed(fadeInStartDelay);
-        this.CurrentAudioSource.DOFade(endValue: 1f, duration: TimeToFade).SetDelay(fadeInStartDelay);
+        this.CurrentAudioSource.DOFade(endValue: BaseBGMVolume, duration: TimeToFade).SetDelay(fadeInStartDelay);
     }
 
     /// <summary>
@@ -200,11 +244,15 @@ public class BGM_SE_Manager : SingletonMonoBehaviour<BGM_SE_Manager>
     /// BGMを停止します。
     /// </summary>
     /// <param name="TimeToFade">フェードアウトにかかる時間</param>
-    public void StopBGM(AudioSource OldAudioSource,float TimeToFade)
+    public void StopBGM(AudioSource OldAudioSource, float TimeToFade)
     {
         if (OldAudioSource != null)
         {
-            OldAudioSource.DOFade(endValue: 0f, duration: TimeToFade).onComplete = () => OldAudioSource.Stop();
+            OldAudioSource.DOFade(endValue: 0f, duration: TimeToFade).onComplete = () =>
+            {
+                if(this.CurrentAudioSource.isPlaying)
+                OldAudioSource.Stop();
+            };
         }
     }
     /// <summary>
@@ -213,6 +261,7 @@ public class BGM_SE_Manager : SingletonMonoBehaviour<BGM_SE_Manager>
     /// <param name="SEVolume">設定ボリューム</param>
     public void BGMVolumeAllConfig(float SEVolume)
     {
+        BaseBGMVolume = SEVolume;
         for (int i = 0; i < 2; i++)
         {
             this.AudioSources[i].volume = SEVolume;
@@ -238,32 +287,6 @@ public class BGM_SE_Manager : SingletonMonoBehaviour<BGM_SE_Manager>
         }
         return 0.0f;
     }
-    //-----------------------------------SE----------------------------------------------
-    bool SEMute;
-    /// <summary>
-    /// SE用のAudioSourceの数
-    /// </summary>
-    int SEAudioSourceSize { get => bgm_se_setting.SEAudioSourceSize; }
-    AudioSource[] SEsources;
-    /// <summary>
-    /// SE
-    /// </summary>
-    public AudioClip[] SE { get => bgm_se_setting.SE; }
-
-    [Range(0f, 1f)]
-    float Basevolume;
-
-    readonly object lockSE = new object();
-    void SEInit()
-    {
-        SEsources = new AudioSource[SEAudioSourceSize];
-        Basevolume = 1f;
-        //SE AudioSource
-        for (int count = 0; count < SEsources.Length; count++)
-        {
-            SEsources[count] = gameObject.AddComponent<AudioSource>();
-        }
-    }
 
     /// <summary>
     /// SEミュート設定又解除
@@ -287,20 +310,19 @@ public class BGM_SE_Manager : SingletonMonoBehaviour<BGM_SE_Manager>
     /// <param name="SEVolume">設定ボリューム</param>
     public void SEVolumeAllConfig(float SEVolume)
     {
-        if (SEVolume > 1)
-        {
-            SEVolume = 1;
-        }
-
         if (SEsources == null)
         {
             Debug.LogError("AudioSouceが存在しません");
             return;
         }
+        if (SEVolume > 1)
+        {
+            SEVolume = 1;
+        }
 
-        Basevolume = SEVolume;
+        BaseSEVolume = SEVolume;
         for (int i = 0; i < SEsources.Length; i++)
-            SEsources[i].volume = Basevolume;
+            SEsources[i].volume = SEVolume;
 
     }
 
@@ -326,7 +348,7 @@ public class BGM_SE_Manager : SingletonMonoBehaviour<BGM_SE_Manager>
         {
             SEVolume = 1;
         }
-
+        BaseSEVolume = SEVolume;
         SEsources[index].volume = SEVolume;
     }
 
@@ -336,31 +358,10 @@ public class BGM_SE_Manager : SingletonMonoBehaviour<BGM_SE_Manager>
     /// <param name="SEIndex">再生中のオーディオ番号</param>
     /// <param name="loop">ループ判定</param>
     /// <returns></returns>
-    public int PlaySE(int SEIndex, bool loop)
+    public static int PlaySE(string SEname, bool loop)
     {
-        if (SEIndex < 0 || SE.Length <= SEIndex)
-        {
-            return -1;//エラー
-        }
-
-        //再生中で無いAudioSouceで鳴らす
-        for (int num = 0; num < SEsources.Length; num++)
-        {
-            AudioSource source = SEsources[num];
-            if (!source.isPlaying)
-            {
-                lock (lockSE)
-                {
-                    if (source.volume < 0.1f)
-                        source.volume = Basevolume;
-                    source.clip = SE[SEIndex];
-                    if (loop) source.loop = true;
-                    else source.loop = false;
-                    source.Play();
-                    return num;
-                }
-            }
-        }
+        if (AudioDictionary.ContainsKey(SEname))
+            return Instance.PlaySE(AudioDictionary[SEname], loop);
         return -1;//再生エラー
     }
     /// <summary>
@@ -371,6 +372,7 @@ public class BGM_SE_Manager : SingletonMonoBehaviour<BGM_SE_Manager>
     /// <returns></returns>
     public int PlaySE(in AudioClip SE, bool loop)
     {
+        if (SE == null) return -1;//再生エラー
         //再生中で無いAudioSouceで鳴らす
         for (int num = 0; num < SEsources.Length; num++)
         {
@@ -379,11 +381,8 @@ public class BGM_SE_Manager : SingletonMonoBehaviour<BGM_SE_Manager>
             {
                 lock (lockSE)
                 {
-                    if (source.volume < 0.1f)
-                        source.volume = Basevolume;
                     source.clip = SE;
-                    if (loop) source.loop = true;
-                    else source.loop = false;
+                    source.loop = loop;
                     source.Play();
                     return num;
                 }
@@ -396,7 +395,7 @@ public class BGM_SE_Manager : SingletonMonoBehaviour<BGM_SE_Manager>
     /// </summary>
     /// <param name="index">停止するオーディオ番号を指定</param>
     /// <returns></returns>
-    public int stopSE(int index)
+    public int StopSE(int index)
     {
         if (SEsources.Length <= index)
         {
