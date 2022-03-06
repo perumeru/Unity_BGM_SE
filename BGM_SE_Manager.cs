@@ -15,32 +15,27 @@ public class BGM_SE_ManagerEdit : Editor
 
         if (!Application.isPlaying)
         {
+            if (BGM_SE_Manager.Instance.bgm_se_setting == null) return;
             GUILayout.Space(20);
             var audioClipBGM = BGM_SE_Manager.Instance.bgm_se_setting.BGM;
-            GUILayout.Label("AUDIO", EditorStyles.label);
-            
+
             for (int i = 0; i < audioClipBGM.Length; i++)
             {
+                if (audioClipBGM[i] == null || audioClipBGM[i].value == null) continue;
                 EditorGUILayout.BeginHorizontal();
-                GUILayout.Label("Key=>", EditorStyles.label);
+                GUILayout.Label(audioClipBGM[i].value.name,  EditorStyles.label);
                 GUILayout.TextField(audioClipBGM[i].key, EditorStyles.textField);
-                GUILayout.TextField("AudioName=>", EditorStyles.label);
-                GUILayout.TextField(audioClipBGM[i].value.name, EditorStyles.textField);
-                GUILayout.FlexibleSpace();
                 EditorGUILayout.EndHorizontal();
             }
             var audioClipSE = BGM_SE_Manager.Instance.bgm_se_setting.SE;
             for (int i = 0; i < audioClipSE.Length; i++)
             {
+                if (audioClipSE[i] == null || audioClipSE[i].value == null) continue;
                 EditorGUILayout.BeginHorizontal();
-                GUILayout.Label("Key=>", EditorStyles.label);
+                GUILayout.Label(audioClipSE[i].value.name, EditorStyles.label);
                 GUILayout.TextField(audioClipSE[i].key, EditorStyles.textField);
-                GUILayout.TextField("AudioName=>", EditorStyles.label);
-                GUILayout.TextField(audioClipSE[i].value.name, EditorStyles.textField);
-                GUILayout.FlexibleSpace();
                 EditorGUILayout.EndHorizontal();
             }
-            
         }
     }
 }
